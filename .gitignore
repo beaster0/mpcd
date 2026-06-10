@@ -1,0 +1,15 @@
+# Python 运行缓存
+__pycache__/
+*.py[cod]
+
+# 本地和服务器运行时日志
+logs/
+data/logs/
+
+# 大型模拟轨迹和结果由运行登记表追踪，不直接放进 git
+data/runs/
+data/results/
+data/derived/
+data/figures/
+data/initial_states/
+tmp/

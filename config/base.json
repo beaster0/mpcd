@@ -1,0 +1,65 @@
+{
+  "pipe": {
+    "radius": 36.0,
+    "length": 100.0
+  },
+  "structure": {
+    "n_values": [1, 2, 3, 4],
+    "segments_per_edge": 5
+  },
+  "bead": {
+    "model": "fene",
+    "wca_sigma": 1.0,
+    "wca_epsilon": 1.0,
+    "fene_k": 30.0,
+    "fene_r0": 1.5,
+    "fene_delta": 0.0,
+    "bond_equilibrium": 0.97,
+    "mass_ratio": 5.0,
+    "neighbor_buffer": 0.2
+  },
+  "mpcd": {
+    "cell_size": 1.0,
+    "number_density": 5.0,
+    "mass": 1.0,
+    "temperature": 1.0,
+    "dt": 0.005,
+    "stream_period": 20,
+    "collision_period": 20,
+    "collision_angle_deg": 130.0
+  },
+  "flow": {
+    "wi_values": [0.0, 1.0, 3.0],
+    "force_per_wi": 0.0001
+  },
+  "output": {
+    "fluid_radial_bins": 24,
+    "gel_radial_bins": 36,
+    "sample_interval": 2000,
+    "progress_update_steps": 500,
+    "save_solvent_state": false
+  },
+  "timescale": {
+    "wi": [0.0],
+    "seeds": [101, 102, 103, 104, 105],
+    "steps": 1600000
+  },
+  "production": {
+    "fluid_wi": [0.0, 1.0, 3.0],
+    "fluid_seeds": [301, 302, 303],
+    "fluid_steps": 1000000,
+    "gel_wi": [0.0, 1.0, 3.0],
+    "gel_seeds": [101, 102, 103, 104, 105],
+    "sample_dt_over_tau_shape": 0.1,
+    "shape_tau_multiplier": 100.0,
+    "radial_tau_multiplier": 50.0,
+    "min_time": 4000.0,
+    "max_time": 20000.0
+  },
+  "server": {
+    "project_dir": "/home/zhangxh/students/sjl/mpcd_modular_v2",
+    "python": "/home/zhangxh/students/sjl/miniconda3/envs/A/bin/python",
+    "active_gpus": [0, 1],
+    "free_gpus": [2, 3]
+  }
+}
