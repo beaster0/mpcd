@@ -5,7 +5,7 @@ from __future__ import annotations
 
 输入：
 - config/base.json：基础物理参数和正式任务规则。
-- data/timescales.csv：每个结构的 tau_shape_used 和 tau_r_used。
+- data/timescales.csv：每个结构的 tau_shape_used 和 tau_int_r_used。
 
 输出：
 - data/tasks_production.csv
@@ -80,20 +80,24 @@ def load_timescales(path: Path, expected_radius: float) -> dict[str, dict[str, f
             pipe_radius = float(row["pipe_radius"])
             if abs(pipe_radius - expected_radius) > 1e-9:
                 raise ValueError(f"{structure} 的时间尺度管半径是 {pipe_radius}，当前配置管半径是 {expected_radius}")
-        if not row.get("tau_shape_used") or not row.get("tau_r_used"):
-            raise ValueError(f"{structure} 缺少可用时间尺度，请先运行当前管半径的零流时间尺度任务")
-        # tau_shape_used 是保守汇总后的形状弛豫时间。
+        if not row.get("tau_shape_used"):
+            raise ValueError(f"{structure} 缺少 tau_shape_used，请先运行零流时间尺度任务")
+        tau_int_key = "tau_int_r_used" if row.get("tau_int_r_used") else "tau_r_used"
+        if not row.get(tau_int_key):
+            raise ValueError(f"{structure} 缺少 tau_int_r_used，请先运行零流时间尺度任务")
         tau_shape = float(row["tau_shape_used"])
-        # tau_r_used 是保守汇总后的径向相关时间。
-        tau_r = float(row["tau_r_used"])
-        # 保存到表里。
-        table[structure] = {"tau_shape": tau_shape, "tau_r": tau_r}
+        tau_int_r = float(row[tau_int_key])
+        table[structure] = {
+            "tau_shape": tau_shape,
+            "tau_int_r": tau_int_r,
+            "tau_r": tau_int_r,
+        }
     # 返回结构到时间尺度的映射。
     return table
 
 
-def design_steps(config: dict[str, Any], tau_shape: float, tau_r: float) -> tuple[int, int, float]:
-    """由时间尺度计算采样间隔和正式运行步数。"""
+def design_steps(config: dict[str, Any], tau_shape: float, tau_int_r: float) -> tuple[int, int, float]:
+    """由时间尺度计算采样间隔和正式运行步数。径向项用 r_cm 自相关时间。"""
     # 基础时间步。
     dt = float(config["mpcd"]["dt"])
     # 正式任务规则。
@@ -105,7 +109,7 @@ def design_steps(config: dict[str, Any], tau_shape: float, tau_r: float) -> tupl
     # 总时间由形状弛豫、径向弛豫和最低时间共同决定。
     total_time = max(
         float(rule["shape_tau_multiplier"]) * tau_shape,
-        float(rule["radial_tau_multiplier"]) * tau_r,
+        float(rule["radial_tau_multiplier"]) * tau_int_r,
         float(rule["min_time"]),
     )
     # max_time 防止某个时间尺度异常大时直接生成不可承受任务。
@@ -138,6 +142,7 @@ def production_rows(config: dict[str, Any], timescales: dict[str, dict[str, floa
                 "sample_interval": config["output"]["sample_interval"],
                 "design_time": config["production"]["fluid_steps"] * float(config["mpcd"]["dt"]),
                 "tau_shape_used": "",
+                "tau_int_r_used": "",
                 "tau_r_used": "",
             })
 
@@ -151,7 +156,7 @@ def production_rows(config: dict[str, Any], timescales: dict[str, dict[str, floa
         # 读取该结构时间尺度。
         tau = timescales[structure]
         # 算出正式步数和采样间隔。
-        steps, sample_interval, design_time = design_steps(config, tau["tau_shape"], tau["tau_r"])
+        steps, sample_interval, design_time = design_steps(config, tau["tau_shape"], tau["tau_int_r"])
         # 结构 × Wi × seed 生成正式凝胶任务。
         for wi in config["production"]["gel_wi"]:
             for seed in config["production"]["gel_seeds"]:
@@ -167,7 +172,8 @@ def production_rows(config: dict[str, Any], timescales: dict[str, dict[str, floa
                     "sample_interval": sample_interval,
                     "design_time": design_time,
                     "tau_shape_used": tau["tau_shape"],
-                    "tau_r_used": tau["tau_r"],
+                    "tau_int_r_used": tau["tau_int_r"],
+                    "tau_r_used": tau["tau_int_r"],
                 })
     # 返回正式任务表。
     return rows

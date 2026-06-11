@@ -71,11 +71,12 @@
 
 ```text
 sample_interval = ceil(0.1 * tau_shape_used / dt)
-production_time = max(100 * tau_shape_used, 50 * tau_r_used, min_time)
+production_time = max(100 * tau_shape_used, 50 * tau_int_r_used, min_time)
 production_steps = ceil(production_time / dt)
 ```
 
-`timescales.py` 会对多个 seed 做稳健汇总，避免单个异常 seed 直接决定全部正式任务长度。
+`tau_int_r_used` 来自 `r_cm` 自相关；`tau_rad_diagnostic`（R²/D_perp）仅诊断，不参与步数。
+`timescales.py` 会报告 `t_analyzed` 与 `t_over_tau_*`；轨迹过短时 flag 标 `short`。
 
 ## 结果文件
 
