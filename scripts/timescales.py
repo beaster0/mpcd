@@ -3,18 +3,14 @@ from __future__ import annotations
 """从零流结果估计每个凝胶结构的时间尺度，并生成论文图。
 
 默认用法：
-    python scripts/analyze_timescales.py
+    python scripts/timescales.py
 
 默认输入：
     config/base.json
-    data/tasks_timescale.csv
-
-如果 data/tasks_timescale.csv 不存在，则自动读取：
-    data/tasks_timescale_gpu*.csv
 
 默认输出：
-    data/timescales.csv
-    data/timescale_runs.csv
+    tables/analysis/timescales.csv
+    tables/analysis/timescale_runs.csv
     figures/timescales/
 
 时间尺度定义：
@@ -45,6 +41,8 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
+from run_timescale import iter_cases as timescale_cases
+
 
 MIN_T_OVER_TAU = 3.0
 MARGINAL_T_OVER_TAU = 5.0
@@ -67,41 +65,6 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
-
-
-def find_default_tasks(root: Path) -> list[Path]:
-    """自动寻找 timescale 任务表，避免运行时写一堆参数。"""
-    single = root / "data" / "tasks_timescale.csv"
-    if single.exists():
-        return [single]
-
-    gpu_tasks = sorted((root / "data").glob("tasks_timescale_gpu*.csv"))
-    if gpu_tasks:
-        return gpu_tasks
-
-    raise FileNotFoundError(
-        "找不到 timescale 任务表。需要存在 data/tasks_timescale.csv "
-        "或 data/tasks_timescale_gpu*.csv"
-    )
-
-
-def read_tasks(paths: list[Path]) -> list[dict[str, str]]:
-    """读取一个或多个任务表，并按 run_id 去重。"""
-    tasks: list[dict[str, str]] = []
-    seen: set[str] = set()
-
-    for path in paths:
-        for row in read_csv(path):
-            run_id = row["run_id"]
-            if run_id in seen:
-                continue
-            seen.add(run_id)
-            tasks.append(row)
-
-    if not tasks:
-        raise ValueError("任务表为空")
-
-    return tasks
 
 
 def second_half(values: np.ndarray) -> np.ndarray:
@@ -932,9 +895,8 @@ def structure_sort_key(name: str) -> tuple[str, int]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=Path("config/base.json"))
-    parser.add_argument("--tasks", type=Path, nargs="*", default=None)
-    parser.add_argument("--output", type=Path, default=Path("data/timescales.csv"))
-    parser.add_argument("--run-output", type=Path, default=Path("data/timescale_runs.csv"))
+    parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--run-output", type=Path, default=None)
     parser.add_argument("--figdir", type=Path, default=Path("figures/timescales"))
     parser.add_argument("--pipe-axis", choices=["x", "y", "z"], default="z")
     parser.add_argument("--no-figures", action="store_true")
@@ -945,8 +907,14 @@ def main() -> None:
     config = read_json(root / args.config)
     radius = float(config["pipe"]["radius"])
 
-    task_paths = [root / path for path in args.tasks] if args.tasks else find_default_tasks(root)
-    tasks = read_tasks(task_paths)
+    output_path = args.output if args.output is not None else root / "tables" / "analysis" / "timescales.csv"
+    run_output_path = args.run_output if args.run_output is not None else root / "tables" / "analysis" / "timescale_runs.csv"
+    if not output_path.is_absolute():
+        output_path = root / output_path
+    if not run_output_path.is_absolute():
+        run_output_path = root / run_output_path
+
+    tasks = timescale_cases(config)
 
     expected_by_structure = Counter(task["structure"] for task in tasks)
     all_structures = sorted(expected_by_structure.keys(), key=structure_sort_key)
@@ -955,9 +923,7 @@ def main() -> None:
     run_rows: list[dict[str, Any]] = []
 
     print(f"读取 config: {args.config}")
-    print("读取 tasks:")
-    for path in task_paths:
-        print(f"  {path}")
+    print("任务来源: config/base.json 内存生成")
     print(f"pipe_radius = {radius}")
     print(f"pipe_axis = {args.pipe_axis}")
     print(f"任务数 = {len(tasks)}")
@@ -1040,11 +1006,11 @@ def main() -> None:
             f"rad_note={row['tau_rad_note']}"
         )
 
-    write_csv(root / args.output, rows)
-    write_csv(root / args.run_output, run_rows)
+    write_csv(output_path, rows)
+    write_csv(run_output_path, run_rows)
 
-    print(f"写入结构汇总: {args.output}")
-    print(f"写入单轨迹诊断: {args.run_output}")
+    print(f"写入结构汇总: {output_path}")
+    print(f"写入单轨迹诊断: {run_output_path}")
 
     if not args.no_figures:
         generate_figures(rows, by_structure, root / args.figdir)

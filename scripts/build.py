@@ -1,20 +1,18 @@
 # 让类型注解在运行时不立即求值，减少低版本 Python 的类型兼容问题。
 from __future__ import annotations
 
-"""生成整体三维网格凝胶结构和任务表。
+"""生成整体三维网格凝胶结构。
 
-这个脚本只做两件事：
-1. 按 n x n x n 网格生成凝胶结构。相邻网格单元共享同一个交联点。
-2. 根据 config/base.json 写出 data/tasks_timescale.csv。
+这个脚本只做一件事：按 n x n x n 网格生成凝胶结构。
+相邻网格单元共享同一个交联点。
 
 输入：config/base.json
 输出：
 - data/structures/g<n>.json
-- data/structures/metrics.csv
-- data/tasks_timescale.csv
+- tables/structures/metrics.csv
 """
 
-# csv 用来读写逗号分隔表格，例如任务表 data/tasks_timescale.csv。
+# csv 用来写结构指标表。
 import csv
 # json 用来读写结构化配置和结构文件，例如 config/base.json。
 import json
@@ -24,7 +22,6 @@ import math
 from pathlib import Path
 # Any 表示“任意类型”，用于配置字典这种混合数据。
 from typing import Any
-
 
 # Vec3 是三维向量类型别名，等价于 tuple[float, float, float]。
 Vec3 = tuple[float, float, float]
@@ -242,46 +239,8 @@ def measure(beads: list[dict[str, Any]], bonds: list[dict[str, int]], pipe_radiu
     }
 
 
-def timescale_task_rows(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """生成零流时间尺度任务表。"""
-    # rows 是最终写入 data/tasks_timescale.csv 的所有任务。
-    rows: list[dict[str, Any]] = []
-    # 管半径写进 run_id，避免 R=18 和 R=36 的结果目录混在一起。
-    pipe_radius = float(config["pipe"]["radius"])
-    pipe_tag = f"r{pipe_radius:g}"
-    # 时间尺度任务只跑凝胶零流，用来测 tau_shape、tau_r 和 D_cm。
-    for n in config["structure"]["n_values"]:
-        for wi in config["timescale"]["wi"]:
-            for seed in config["timescale"]["seeds"]:
-                rows.append({
-                    "run_id": f"ts_{pipe_tag}_g{n}_s{seed}",
-                    "kind": "gel",
-                    "stage": "timescale",
-                    "pipe_radius": pipe_radius,
-                    "structure": f"g{n}",
-                    "wi": wi,
-                    "seed": seed,
-                    "steps": config["timescale"]["steps"],
-                })
-    # 返回完整任务列表。
-    return rows
-
-
-def split_gpu_tasks(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """把任务轮流分给 GPU0 和 GPU1。"""
-    # 两个列表分别对应两张显卡要跑的任务。
-    gpu0: list[dict[str, Any]] = []
-    gpu1: list[dict[str, Any]] = []
-    # enumerate 同时给出序号 index 和任务 row。
-    for index, row in enumerate(rows):
-        # 偶数序号给 GPU0，奇数序号给 GPU1，让任务数量尽量均匀。
-        (gpu0 if index % 2 == 0 else gpu1).append(row)
-    # 返回两个任务分片。
-    return gpu0, gpu1
-
-
 def main() -> None:
-    """生成结构和任务表。"""
+    """生成结构和结构指标表。"""
     # Path.cwd() 是当前运行命令所在目录；本项目要求在项目根目录运行。
     root = Path.cwd()
     # 读取总配置。
@@ -299,17 +258,9 @@ def main() -> None:
         metric_rows.append({"structure": f"g{n}", **structure["metrics"]})
 
     # 写出结构指标表。
-    write_csv(root / "data" / "structures" / "metrics.csv", metric_rows)
-    # 生成零流时间尺度任务表。
-    rows = timescale_task_rows(config)
-    # 把任务表拆成 GPU0/GPU1 两份。
-    gpu0, gpu1 = split_gpu_tasks(rows)
-    # 写出时间尺度任务表和两张卡的任务分片。
-    write_csv(root / "data" / "tasks_timescale.csv", rows)
-    write_csv(root / "data" / "tasks_timescale_gpu0.csv", gpu0)
-    write_csv(root / "data" / "tasks_timescale_gpu1.csv", gpu1)
+    write_csv(root / "tables" / "structures" / "metrics.csv", metric_rows)
     # 给终端一个明确提示，说明生成完成。
-    print("生成完成: data/structures/*.json, data/structures/metrics.csv, data/tasks_timescale*.csv")
+    print("生成完成: data/structures/*.json, tables/structures/metrics.csv")
 
 
 if __name__ == "__main__":

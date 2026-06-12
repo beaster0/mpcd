@@ -5,7 +5,6 @@ from __future__ import annotations
 
 输入：
 - config/base.json：物理参数、结构列表、流强、随机种子和服务器设置。
-- data/tasks_timescale.csv 或 data/tasks_production.csv：任务表。
 - data/structures/*.json：由 scripts/build.py 生成的整体三维网格凝胶结构。
 
 输出：
@@ -14,18 +13,16 @@ from __future__ import annotations
 - results/<run_id>/state.npz：末态坐标和速度。
 - results/<run_id>/timeseries.npz：凝胶质心、回转张量、形状、取向和壁面间隙时间序列。
 
-这个文件只负责运行任务。结构怎么生成、任务怎么列、状态怎么汇总，分别放在 build.py
-和 status.py 里，避免一个脚本承担太多职责。
+这个文件只保留底层“运行一条模拟”的函数。具体要跑哪类数据，
+由 run_timescale.py 和 run_flow.py 决定。
 """
 
-# argparse 用来解析命令行参数，例如 --only 和 --steps。
-import argparse
-# csv 用来读取任务表。
-import csv
 # json 用来读写配置、状态和摘要文件。
 import json
 # math 提供 sqrt、acos、pi 等数学函数。
 import math
+# time 用来计算进度条速度和预计剩余时间。
+import time
 # traceback 用来在任务失败时保存完整报错堆栈，方便定位问题。
 import traceback
 # Path 用来处理文件路径。
@@ -48,12 +45,54 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def read_tasks(path: Path) -> list[dict[str, str]]:
-    """读取任务表。"""
-    # utf-8-sig 能正确读取 build.py 写出的带 BOM CSV。
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        # DictReader 把每一行任务变成字典。
-        return list(csv.DictReader(handle))
+def format_duration(seconds: float) -> str:
+    """把秒数格式化成适合进度条显示的时间。"""
+    # 非法或负数时间统一显示未知。
+    if not math.isfinite(seconds) or seconds < 0:
+        return "--:--"
+    # 四舍五入到整数秒，避免显示过多小数。
+    total = int(round(seconds))
+    # 小于 1 小时显示 mm:ss。
+    if total < 3600:
+        minutes, sec = divmod(total, 60)
+        return f"{minutes:02d}:{sec:02d}"
+    # 超过 1 小时显示 hh:mm:ss。
+    hours, rem = divmod(total, 3600)
+    minutes, sec = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{sec:02d}"
+
+
+def print_progress(run_id: str, done: int, total: int, start_time: float, force: bool = False) -> None:
+    """打印单行模拟进度条。
+
+    进度条写在同一行，避免长任务刷出大量日志。每条任务完成时会换行。
+    """
+    # total 至少为 1，避免除以 0。
+    total = max(total, 1)
+    # 计算完成比例。
+    ratio = min(max(done / total, 0.0), 1.0)
+    # 进度条宽度固定，终端里比较整齐。
+    width = 28
+    # 已填充的格子数。
+    filled = int(round(width * ratio))
+    # 用 # 表示已完成，用 - 表示未完成，保持 ASCII 兼容。
+    bar = "#" * filled + "-" * (width - filled)
+    # 已用真实时间。
+    elapsed = max(time.monotonic() - start_time, 1e-9)
+    # 每秒模拟步数。
+    rate = done / elapsed if done > 0 else 0.0
+    # 预计剩余时间。
+    eta = (total - done) / rate if rate > 0 else float("inf")
+    # force=False 时仍打印；参数保留给以后如果要限频更新。
+    _ = force
+    # \r 回到行首，end="" 表示不换行，flush=True 立刻显示。
+    print(
+        f"\r[{run_id}] |{bar}| {ratio * 100:6.2f}% "
+        f"{done}/{total} step "
+        f"{rate:,.0f} step/s ETA {format_duration(eta)}",
+        end="",
+        flush=True,
+    )
 
 
 def pipe_volume(radius: float, length: float) -> float:
@@ -113,17 +152,17 @@ def status_path(root: Path, run_id: str) -> Path:
     return run_dir(root, run_id) / "status.json"
 
 
-def force_from_wi(config: dict[str, Any], wi: float) -> tuple[float, float, float]:
-    """把计划流强标签换成体力。
+def force_from_strength(config: dict[str, Any], flow_strength: float) -> tuple[float, float, float]:
+    """把归一化驱动力强度换成体力。
 
-    现在先用配置文件里的线性比例。真正完成空管标定后，只需要改 config/base.json
-    里的 force_per_wi，不必改代码。
+    flow_strength 是配置和论文里的直接控制量。真正完成空管标定后，
+    只需要改 config/base.json 里的 force_per_strength，不必改代码。
     """
     # 零流强时不施加体力。
-    if wi <= 0.0:
+    if flow_strength <= 0.0:
         return (0.0, 0.0, 0.0)
     # 体力沿 z 方向施加；x/y 方向为 0。
-    return (0.0, 0.0, float(config["flow"]["force_per_wi"]) * wi)
+    return (0.0, 0.0, float(config["flow"]["force_per_strength"]) * flow_strength)
 
 
 def load_structure(root: Path, structure: str) -> dict[str, Any]:
@@ -551,7 +590,7 @@ def save_profile_average(path: Path, acc: dict[str, Any], config: dict[str, Any]
     }
 
 
-def run_with_sampling(sim: Any, n_steps: int, sample_interval: int, sample_gel: bool, radius: float, profile_path: Path, series_path: Path, config: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def run_with_sampling(sim: Any, n_steps: int, sample_interval: int, sample_gel: bool, radius: float, profile_path: Path, series_path: Path, config: dict[str, Any], run_id: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """分段推进模拟，并按固定间隔记录凝胶和流体剖面。
 
     每次采样后都写一次临时 `timeseries.npz`，长任务中途失败时也能保留已完成采样。
@@ -566,6 +605,10 @@ def run_with_sampling(sim: Any, n_steps: int, sample_interval: int, sample_gel: 
 
     # done 是已经完成的模拟步数。
     done = 0
+    # 记录任务开始时间，用于进度条速度和剩余时间估计。
+    start_time = time.monotonic()
+    # 先打印 0% 进度，让用户确认任务已经真正开始。
+    print_progress(run_id, done, n_steps, start_time, force=True)
     # 只要还没跑满 n_steps，就继续分段推进。
     while done < n_steps:
         # 最后一段可能不足 sample_interval，所以取 min。
@@ -574,6 +617,8 @@ def run_with_sampling(sim: Any, n_steps: int, sample_interval: int, sample_gel: 
         sim.run(chunk)
         # 更新已完成步数。
         done += chunk
+        # 每完成一个采样段就刷新进度条。
+        print_progress(run_id, done, n_steps, start_time)
         # 获取当前快照；这一步会把当前状态取到 Python 侧。
         snapshot = sim.state.get_snapshot()
         # 每个采样点都加入流体剖面平均。
@@ -591,6 +636,8 @@ def run_with_sampling(sim: Any, n_steps: int, sample_interval: int, sample_gel: 
     # 纯流体任务没有凝胶 rows，也写一个空 timeseries.npz。
     if not sample_gel:
         save_timeseries(series_path, rows)
+    # 任务完成后换行，避免下一条日志接在进度条后面。
+    print()
     # 返回凝胶时间序列和流体剖面摘要。
     return rows, profile_summary
 
@@ -611,14 +658,14 @@ def close_sim(sim: Any) -> None:
         pass
 
 
-def run_task(root: Path, config: dict[str, Any], task: dict[str, str], steps: int | None) -> dict[str, Any]:
+def run_task(root: Path, config: dict[str, Any], task: dict[str, Any], steps: int | None) -> dict[str, Any]:
     """运行一条任务。"""
     # hoomd 是模拟引擎。
     import hoomd  # type: ignore
     # numpy 用于最后计算径向最大值等摘要。
     import numpy as np  # type: ignore
 
-    # run_id 是任务唯一编号，例如 g4_w3_s105。
+    # run_id 是任务唯一编号，例如 r36_g4_f3_s105。
     run_id = task["run_id"]
     # out 是这条任务的结果目录。
     out = run_dir(root, run_id)
@@ -629,14 +676,15 @@ def run_task(root: Path, config: dict[str, Any], task: dict[str, str], steps: in
     n_solvent = solvent_count(config)
     # 计算并记录 MPCD 时间尺度。
     scales = mpcd_time_scales(config)
-    # 如果命令行给了 --steps，就用临时步数；否则用任务表里的正式步数。
+    # 如果命令行给了 --steps，就用临时步数；否则用内存任务里的设计步数。
     n_steps = int(steps if steps is not None else task["steps"])
     # 管半径。
     radius = float(config["pipe"]["radius"])
     # MPCD 温度。
     temperature = float(config["mpcd"]["temperature"])
-    # 把 Wi 标签换成 z 方向体力。
-    body_force = force_from_wi(config, float(task["wi"]))
+    # 把归一化驱动力强度换成 z 方向体力。
+    flow_strength = float(task["flow_strength"])
+    body_force = force_from_strength(config, flow_strength)
 
     # 任务开始前先写 running 状态，方便外部监控。
     write_json(status_path(root, run_id), {"run_id": run_id, "status": "running", "steps": n_steps})
@@ -692,7 +740,7 @@ def run_task(root: Path, config: dict[str, Any], task: dict[str, str], steps: in
     sim.create_state_from_snapshot(make_snapshot(root, config, task, n_solvent))
     # 把积分器挂到模拟对象上。
     sim.operations.integrator = integrator
-    # 采样间隔优先来自任务表；没有该列时用配置里的默认值。
+    # 采样间隔优先来自内存任务；没有该字段时用配置里的默认值。
     sample_interval = int(float(task.get("sample_interval", config["output"].get("sample_interval", 2000))))
     # 分段运行并采样凝胶时间序列和流体剖面。
     gel_rows, profile_summary = run_with_sampling(
@@ -704,6 +752,7 @@ def run_task(root: Path, config: dict[str, Any], task: dict[str, str], steps: in
         out / "profiles.npz",
         out / "timeseries.npz",
         config,
+        run_id,
     )
 
     # 运行结束后取末态快照。
@@ -728,7 +777,7 @@ def run_task(root: Path, config: dict[str, Any], task: dict[str, str], steps: in
     summary = {
         "run_id": run_id,
         "structure": task["structure"],
-        "wi": float(task["wi"]),
+        "flow_strength": flow_strength,
         "seed": int(task["seed"]),
         "steps": n_steps,
         "solvent_count": n_solvent,
@@ -756,66 +805,12 @@ def run_task(root: Path, config: dict[str, Any], task: dict[str, str], steps: in
 
 
 def main() -> None:
-    """命令行入口。"""
-    # 创建命令行解析器。
-    parser = argparse.ArgumentParser()
-    # --config 指定配置文件路径。
-    parser.add_argument("--config", type=Path, default=Path("config/base.json"))
-    # --tasks 指定任务表路径。
-    parser.add_argument("--tasks", type=Path, default=Path("data/tasks_timescale.csv"))
-    # --only 只运行某一个 run_id，常用于短验证。
-    parser.add_argument("--only", default=None, help="只运行指定 run_id")
-    # --max 最多运行多少条任务，常用于调试。
-    parser.add_argument("--max", type=int, default=None, help="最多运行多少条")
-    # --steps 临时覆盖步数，不改任务表。
-    parser.add_argument("--steps", type=int, default=None, help="临时覆盖步数，用于短验证")
-    # 解析命令行参数。
-    args = parser.parse_args()
-
-    # 当前目录应是项目根目录。
-    root = Path.cwd()
-    # 读取配置。
-    config = read_json(args.config)
-    # 读取任务表。
-    tasks = read_tasks(args.tasks)
-    # 如果指定 --only，就筛选出对应任务。
-    if args.only:
-        tasks = [task for task in tasks if task["run_id"] == args.only]
-    # 如果指定 --max，就只取前 max 条。
-    if args.max is not None:
-        tasks = tasks[: args.max]
-    # 没有任务可跑时直接退出并提示。
-    if not tasks:
-        raise SystemExit("没有任务可运行")
-
-    # 失败任务计数。
-    failed = 0
-    # 顺序运行任务表中的每一条任务。
-    for task in tasks:
-        try:
-            # 打印开始信息，flush=True 表示立刻写入日志。
-            print(f"[开始] {task['run_id']}", flush=True)
-            # 真正运行一条任务。
-            result = run_task(root, config, task, args.steps)
-            # 打印完成信息，包括溶剂粒子数和速度 TPS。
-            print(f"[完成] {task['run_id']} solvent={result['solvent_count']} tps={result['tps']}", flush=True)
-        except Exception as exc:
-            # 捕获异常，避免一条任务失败时没有状态文件。
-            failed += 1
-            # payload 记录失败原因和完整 traceback。
-            payload = {
-                "run_id": task.get("run_id"),
-                "status": "failed",
-                "error": str(exc),
-                "traceback": traceback.format_exc(),
-            }
-            # 把失败状态写入对应 status.json。
-            write_json(status_path(root, task["run_id"]), payload)
-            # 同时在终端/日志中打印失败摘要。
-            print(f"[失败] {task['run_id']} {type(exc).__name__}: {exc}", flush=True)
-    # 如果有任意任务失败，最后用非零退出码结束，方便外部发现问题。
-    if failed:
-        raise SystemExit(f"有 {failed} 条任务失败")
+    """提示用户使用具体数据脚本。"""
+    raise SystemExit(
+        "run.py 是底层模拟函数文件，不直接运行。\n"
+        "零流时间尺度数据: python scripts/run_timescale.py 0 1\n"
+        "正式流动数据: python scripts/run_flow.py 0 1"
+    )
 
 
 if __name__ == "__main__":

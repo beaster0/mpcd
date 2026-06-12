@@ -29,26 +29,25 @@
     "collision_angle_deg": 130.0
   },
   "flow": {
-    "wi_values": [0.0, 1.0, 3.0],
-    "force_per_wi": 0.0001
+    "strength_values": [0.0, 1.0, 3.0],
+    "force_per_strength": 0.0001
   },
   "output": {
     "fluid_radial_bins": 24,
     "gel_radial_bins": 36,
     "sample_interval": 2000,
-    "progress_update_steps": 500,
     "save_solvent_state": false
   },
   "timescale": {
-    "wi": [0.0],
+    "flow_strength": [0.0],
     "seeds": [101, 102, 103, 104, 105],
     "steps": 1600000
   },
   "production": {
-    "fluid_wi": [0.0, 1.0, 3.0],
+    "fluid_flow_strength": [0.0, 1.0, 3.0],
     "fluid_seeds": [301, 302, 303],
     "fluid_steps": 1000000,
-    "gel_wi": [0.0, 1.0, 3.0],
+    "gel_flow_strength": [0.0, 1.0, 3.0],
     "gel_seeds": [101, 102, 103, 104, 105],
     "sample_dt_over_tau_shape": 0.1,
     "shape_tau_multiplier": 100.0,

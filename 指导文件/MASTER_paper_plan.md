@@ -32,15 +32,15 @@ $$
 主结果使用零流条件作为同结构、同管道、同壁面相互作用下的基线。流动响应优先报告相对于零流基线的变化，例如
 
 $$
-R_0(r;\mathrm{Wi})=
-P_{\mathrm{cm}}(r;\mathrm{Wi})-P_{\mathrm{cm}}(r;0),
+R_0(r;\mathcal{F})=
+P_{\mathrm{cm}}(r;\mathcal{F})-P_{\mathrm{cm}}(r;0),
 $$
 
 以及
 
 $$
-\Delta \bar r(\mathrm{Wi})=
-\langle r_{\mathrm{cm}}/R\rangle_{\mathrm{Wi}}
+\Delta \bar r(\mathcal{F})=
+\langle r_{\mathrm{cm}}/R\rangle_{\mathcal{F}}
 -
 \langle r_{\mathrm{cm}}/R\rangle_0.
 $$
@@ -70,7 +70,8 @@ $$
 | $N_{\mathrm{tumb}}$ | 翻滚事件数 |
 | $f_{\mathrm{tumb}}$ | 翻滚频率 |
 | $\mathrm{Re}$ | 雷诺数 |
-| $\mathrm{Wi}$ | 魏森贝格数 |
+| $\mathcal{F}$ | 归一化驱动力强度，$\mathcal{F}=f_z/f_0$ |
+| $\mathrm{Wi}_s$ | 结构相关魏森贝格数，由速度剖面和形状弛豫时间后处理得到 |
 | $\mathrm{Pe}$ | 佩克莱数 |
 | $\dot\gamma_{\mathrm{wall}}$ | 管壁剪切率 |
 | $\dot\gamma_{\mathrm{cm}}$ | 凝胶质心位置经历的局部剪切率 |
@@ -174,13 +175,24 @@ $$
 
 ## 5. 流强定义
 
-参考魏森贝格数定义为
+论文主文用归一化驱动力强度表示流强：
 
 $$
-\mathrm{Wi}_{\mathrm{ref}}=\dot\gamma_{\mathrm{wall}}\tau_{\mathrm{ref}}.
+\mathcal{F}=\frac{f_z}{f_0},
+\qquad
+f_z=f_0\mathcal{F},
+\qquad
+f_0=1.0\times10^{-4}.
 $$
 
-$\tau_{\mathrm{ref}}$ 采用 G2 在零流条件下的形状弛豫时间。这个定义让所有结构共享同一个外部流强标尺。每个结构还应报告结构自身的
+当前正式任务使用 $\mathcal{F}=0,1,3$。这个量是模拟中直接施加的控制量，因此作为主横轴最清楚。纯流体速度剖面出来后，再计算壁面剪切率：
+
+$$
+\dot\gamma_{\mathrm{wall}}=
+\left.\left|\frac{du_z}{dr}\right|\right|_{r=R}.
+$$
+
+结构相关魏森贝格数作为派生量报告：
 
 $$
 \mathrm{Wi}_s=\dot\gamma_{\mathrm{wall}}\tau_{\mathrm{shape},s}.
@@ -195,7 +207,7 @@ $$
 \mathrm{Wi}_{\mathrm{loc},s}=\left\langle \dot\gamma_{\mathrm{cm}}(t)\right\rangle\tau_{\mathrm{shape},s}.
 $$
 
-当前代码中 `force_per_wi=0.0001` 是第一批运行使用的体力比例。纯流体结果出来后，应根据速度剖面重新确认 $g$、$\dot\gamma_{\mathrm{wall}}$、$\mathrm{Wi}_{\mathrm{ref}}$ 和 $\mathrm{Re}_R$ 的对应关系。
+当前代码中 `force_per_strength=0.0001` 是体力比例。纯流体结果出来后，应根据速度剖面确认 $\mathcal{F}$、$\dot\gamma_{\mathrm{wall}}$、$\mathrm{Wi}_s$ 和 $\mathrm{Re}_R$ 的对应关系。
 
 ---
 
@@ -208,15 +220,15 @@ $$
 运行编号使用短名称：
 
 ```text
-fluid_w<Wi>_s<seed>
-g<n>_w<Wi>_s<seed>
+fluid_f<F>_s<seed>
+g<n>_f<F>_s<seed>
 ```
 
 示例：
 
 ```text
-fluid_w1_s301
-g4_w3_s105
+fluid_f1_s301
+g4_f3_s105
 ```
 
 这种命名短、清楚、便于在结果目录中直接查找。
@@ -228,19 +240,19 @@ g4_w3_s105
 | 项目 | 设置 |
 |---|---|
 | 结构 | G1、G2、G3、G4 |
-| 流强 | $\mathrm{Wi}_{\mathrm{ref}}=0$ |
+| 流强 | $\mathcal{F}=0$ |
 | seed | 101、102、103、104、105 |
 | 步数 | 800,000 |
 | 物理时间 | 4,000 |
 | 数量 | 20 |
 
-时间尺度任务表由 `scripts/build.py` 生成：
+时间尺度任务不写成 CSV。运行时由 `scripts/run_timescale.py` 根据 `config/base.json` 直接循环生成并运行。
 
 ```text
-data/tasks_timescale.csv
-data/tasks_timescale_gpu0.csv
-data/tasks_timescale_gpu1.csv
+python scripts/run_timescale.py 0 1
 ```
+
+命令最后的 `0 1` 表示同时使用 GPU 0 和 GPU 1；如果只想用一张卡，例如 GPU 0，则运行 `python scripts/run_timescale.py 0`。
 
 ### 6.3 正式任务
 
@@ -249,13 +261,13 @@ data/tasks_timescale_gpu1.csv
 | 项目 | 设置 |
 |---|---|
 | 结构 | 空管 |
-| 流强 | $\mathrm{Wi}_{\mathrm{ref}}=0,1,3$ |
+| 流强 | $\mathcal{F}=0,1,3$ |
 | seed | 301、302、303 |
 | 步数 | 1,000,000 |
 | 物理时间 | 5,000 |
 | 数量 | 9 |
 
-凝胶正式任务同时包含零流基线和流动响应统计。$\mathrm{Wi}=0$ 的 5 个 seed 用来计算同结构零流基线，$\mathrm{Wi}=1,3$ 用来计算流动响应。每个结构的正式运行长度由 `data/timescales.csv` 自动决定：
+凝胶正式任务同时包含零流基线和流动响应统计。$\mathcal{F}=0$ 的 5 个 seed 用来计算同结构零流基线，$\mathcal{F}=1,3$ 用来计算流动响应。每个结构的正式运行长度由 `tables/analysis/timescales.csv` 自动决定：
 
 $$
 \Delta t_{\mathrm{sample}}=0.1\tau_{\mathrm{shape,used}},
@@ -273,19 +285,19 @@ $$
 | 项目 | 设置 |
 |---|---|
 | 结构 | G1、G2、G3、G4 |
-| 流强 | $\mathrm{Wi}_{\mathrm{ref}}=0,1,3$ |
+| 流强 | $\mathcal{F}=0,1,3$ |
 | seed | 101、102、103、104、105 |
-| 步数 | 由 `scripts/plan.py` 根据时间尺度生成 |
-| 采样间隔 | 由 `scripts/plan.py` 根据时间尺度生成 |
+| 步数 | 运行时由 `scripts/run_flow.py` 根据时间尺度生成 |
+| 采样间隔 | 运行时由 `scripts/run_flow.py` 根据时间尺度生成 |
 | 数量 | 60 |
 
-正式任务表由 `scripts/plan.py` 生成：
+正式任务也不写成 CSV。运行时由 `scripts/run_flow.py` 读取 `tables/analysis/timescales.csv`，直接循环生成并运行：
 
 ```text
-data/tasks_production.csv
-data/tasks_production_gpu0.csv
-data/tasks_production_gpu1.csv
+python scripts/run_flow.py 0 1
 ```
+
+命令最后的 GPU 编号可以按实际空闲显卡填写，例如 `python scripts/run_flow.py 2 3`。
 
 正式任务总数为
 
@@ -361,14 +373,14 @@ $$
 零流基线为
 
 $$
-P_0(r)=P_{\mathrm{cm}}(r;\mathrm{Wi}=0).
+P_0(r)=P_{\mathrm{cm}}(r;\mathcal{F}=0).
 $$
 
 流动下的一阶残差为
 
 $$
-R_0(r;\mathrm{Wi})=
-P_{\mathrm{cm}}(r;\mathrm{Wi})-P_{\mathrm{cm}}(r;0).
+R_0(r;\mathcal{F})=
+P_{\mathrm{cm}}(r;\mathcal{F})-P_{\mathrm{cm}}(r;0).
 $$
 
 分布级指标包括：
@@ -400,7 +412,7 @@ $$
 归一化流向形变为
 
 $$
-\frac{G_{zz}(\mathrm{Wi})}{G_{zz}(0)}.
+\frac{G_{zz}(\mathcal{F})}{G_{zz}(0)}.
 $$
 
 主轴由回转张量最大本征值对应的单位向量 $\mathbf{u}_1(t)$ 表示。主轴正负等价，取向角定义为
@@ -446,7 +458,7 @@ $$
 
 ### 图 1：模型结构和控制参数
 
-展示圆管泊肃叶流几何、G1--G4 整体共享节点网格结构、$N_{\mathrm{cell}}$、$N$、$R_g/R$ 和 $\mathrm{Wi}_{\mathrm{ref}}$。
+展示圆管泊肃叶流几何、G1--G4 整体共享节点网格结构、$N_{\mathrm{cell}}$、$N$、$R_g/R$ 和 $\mathcal{F}$。
 
 ### 图 2：纯流体标定和零流基线
 
@@ -454,7 +466,7 @@ $$
 
 ### 图 3：径向分布和流动残差
 
-展示 $P_{\mathrm{cm}}(r;\mathrm{Wi})$、$R_0(r;\mathrm{Wi})$、$\Delta\bar r$、$L_1$、$W_1$ 和近壁尾部概率。
+展示 $P_{\mathrm{cm}}(r;\mathcal{F})$、$R_0(r;\mathcal{F})$、$\Delta\bar r$、$L_1$、$W_1$ 和近壁尾部概率。
 
 ### 图 4：形变和取向
 
@@ -477,13 +489,12 @@ $$
 ## 13. 执行顺序
 
 1. 修改 `config/base.json` 中的基础物理参数。
-2. 运行 `python scripts/build.py` 生成结构和零流时间尺度任务表。
-3. 检查 `data/structures/metrics.csv`，确认 G1--G4 的珠子数、键数和 $R_g/R$。
-4. 在服务器上分别启动 `python scripts/gpu.py 0` 和 `python scripts/gpu.py 1`，先跑 `data/tasks_timescale.csv`。
-5. 时间尺度任务完成后，从 `timeseries.npz` 计算每个结构的 `tau_shape_used` 和 `tau_r_used`，写入 `data/timescales.csv`。
-6. 运行 `python scripts/plan.py`，生成 `data/tasks_production.csv`。
-7. 用 `python scripts/gpu.py 0 --stage production` 和 `python scripts/gpu.py 1 --stage production` 跑正式任务。
-8. 用 `python scripts/status.py --tasks data/tasks_production.csv` 查看正式任务状态。
+2. 运行 `python scripts/build.py` 生成结构。
+3. 检查 `tables/structures/metrics.csv`，确认 G1--G4 的珠子数、键数和 $R_g/R$。
+4. 在服务器上运行 `python scripts/run_timescale.py 0 1`，先跑零流时间尺度任务。
+5. 时间尺度任务完成后，从 `timeseries.npz` 计算每个结构的 `tau_shape_used` 和 `tau_r_used`，写入 `tables/analysis/timescales.csv`。
+6. 运行 `python scripts/run_flow.py 0 1` 跑正式任务。
+7. 用 `python scripts/run_flow.py --status` 查看正式任务状态。
 9. 每条任务完成后检查 `summary.json`、`profiles.npz` 和 `timeseries.npz`。
 10. 用后处理脚本从 `timeseries.npz` 计算径向分布、形变、取向和翻滚指标。
 11. 按图 1--图 7 的顺序组织结果。

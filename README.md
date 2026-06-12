@@ -1,30 +1,35 @@
 # MPCD 网格凝胶项目
 
-这个项目只保留一条运行链条：先生成结构，再跑零流时间尺度，再由时间尺度生成正式任务。
+这个项目只保留一条运行链条：先生成结构，再跑零流时间尺度，再由时间尺度直接运行正式任务。
 
 ## 运行顺序
 
 1. 修改基础参数：`config/base.json`
-2. 生成网格结构和零流任务：`python scripts/build.py`
-3. 启动零流任务：`python scripts/gpu.py 0` 和 `python scripts/gpu.py 1`
-4. 查看任务状态：`python scripts/status.py`
+2. 生成网格结构：`python scripts/build.py`
+3. 启动零流任务：`python scripts/run_timescale.py 0 1`
+4. 查看零流状态：`python scripts/run_timescale.py --status`
 5. 由零流结果生成时间尺度表：`python scripts/timescales.py`
-6. 生成正式任务表：`python scripts/plan.py`
-7. 启动正式任务：`python scripts/gpu.py 0 --stage production` 和 `python scripts/gpu.py 1 --stage production`
+6. 启动正式任务：`python scripts/run_flow.py 0 1`
 
 启动任务前先确认 GPU 空闲；不要在没有确认时直接启动正式任务。
 
 ## 文件职责
 
 - `config/base.json`：唯一的基础参数文件。
-- `scripts/build.py`：生成 `g1` 到 `g4` 四个整体网格结构，并写出零流任务表。
-- `scripts/run.py`：读取任务表并运行模拟。
-- `scripts/gpu.py`：指定 GPU 后调用 `run.py`。
-- `scripts/status.py`：汇总任务完成、运行、失败、未开始数量。
-- `scripts/timescales.py`：从零流结果估计 `tau_shape` 和 `tau_r`。
-- `scripts/plan.py`：根据 `data/timescales.csv` 生成正式任务表。
-- `data/structures/`：网格结构文件和结构指标表。
+- `scripts/build.py`：生成 `g1` 到 `g4` 四个整体网格结构。
+- `scripts/run.py`：底层模拟函数文件，不直接运行。
+- `scripts/run_timescale.py`：运行零流时间尺度数据；命令后面的数字就是要使用的 GPU。
+- `scripts/run_flow.py`：运行正式流动数据；命令后面的数字就是要使用的 GPU。
+- `scripts/gpu.py`：统一 GPU 分片调度函数；不单独运行，所有运行任务的脚本都应调用它。
+- `scripts/timescales.py`：从零流结果估计 `tau_shape` 和 `tau_int_r`。
+- `data/structures/`：网格结构 JSON。
+- `tables/structures/metrics.csv`：结构指标表。
+- `tables/analysis/`：时间尺度汇总表和单轨迹诊断表。
 - `results/<run_id>/`：每条任务的输出目录。
+
+## 运行脚本约定
+
+所有真正耗时的运行脚本都必须复用 `run.py::run_task()`，不要自己重新写模拟推进循环。这样每条模拟都会自动显示统一进度条，包括完成百分比、步数、速度和预计剩余时间。
 
 ## 结构定义
 
