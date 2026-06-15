@@ -1,10 +1,16 @@
 {
   "pipe": {
-    "radius": 36.0,
+    "analysis_radius": 36.0,
+    "geometry_radius_offset": -0.8614195567664709,
     "length": 100.0
   },
   "structure": {
-    "n_values": [1, 2, 3, 4],
+    "n_values": [
+      1,
+      2,
+      3,
+      4
+    ],
     "segments_per_edge": 5
   },
   "bead": {
@@ -29,26 +35,64 @@
     "collision_angle_deg": 130.0
   },
   "flow": {
-    "strength_values": [0.0, 1.0, 3.0],
-    "force_per_strength": 0.0001
+    "force_values": [
+      0.0,
+      0.001,
+      0.003,
+      0.005,
+      0.01
+    ]
   },
   "output": {
     "fluid_radial_bins": 24,
     "gel_radial_bins": 36,
     "sample_interval": 2000,
+    "profile_start_fraction": 0.5,
+    "gel_analysis_start_time": 5000.0,
+    "gel_analysis_end_time": 20000.0,
     "save_solvent_state": false
   },
   "timescale": {
-    "flow_strength": [0.0],
-    "seeds": [101, 102, 103, 104, 105],
+    "force": [
+      0.0
+    ],
+    "seeds": [
+      101,
+      102,
+      103,
+      104,
+      105
+    ],
     "steps": 1600000
   },
   "production": {
-    "fluid_flow_strength": [0.0, 1.0, 3.0],
-    "fluid_seeds": [301, 302, 303],
+    "fluid_force": [
+      0.0,
+      0.001,
+      0.003,
+      0.005,
+      0.01
+    ],
+    "fluid_seeds": [
+      301,
+      302,
+      303
+    ],
     "fluid_steps": 1000000,
-    "gel_flow_strength": [0.0, 1.0, 3.0],
-    "gel_seeds": [101, 102, 103, 104, 105],
+    "gel_force": [
+      0.0,
+      0.001,
+      0.003,
+      0.005,
+      0.01
+    ],
+    "gel_seeds": [
+      101,
+      102,
+      103,
+      104,
+      105
+    ],
     "sample_dt_over_tau_shape": 0.1,
     "shape_tau_multiplier": 100.0,
     "radial_tau_multiplier": 50.0,
@@ -58,7 +102,14 @@
   "server": {
     "project_dir": "/home/zhangxh/students/sjl/mpcd_modular_v2",
     "python": "/home/zhangxh/students/sjl/miniconda3/envs/A/bin/python",
-    "active_gpus": [0, 1],
-    "free_gpus": [2, 3]
+    "active_gpus": [
+      0,
+      1,
+      2
+    ],
+    "free_gpus": [
+      3
+    ]
   }
 }
+

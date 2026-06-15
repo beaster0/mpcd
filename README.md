@@ -1,35 +1,80 @@
-# MPCD 网格凝胶项目
+﻿# MPCD 网格凝胶项目
 
-这个项目只保留一条运行链条：先生成结构，再跑零流时间尺度，再由时间尺度直接运行正式任务。
+这个项目按“一个文件只做一件事”组织。想要什么数据，就运行对应脚本。
 
 ## 运行顺序
 
 1. 修改基础参数：`config/base.json`
-2. 生成网格结构：`python scripts/build.py`
-3. 启动零流任务：`python scripts/run_timescale.py 0 1`
-4. 查看零流状态：`python scripts/run_timescale.py --status`
-5. 由零流结果生成时间尺度表：`python scripts/timescales.py`
-6. 启动正式任务：`python scripts/run_flow.py 0 1`
+2. 生成结构：`python scripts/结构.py`
+3. 跑一条零流轨迹：`python scripts/轨迹.py --stage time --structure g3 --seed 101 --gpu 0`
+4. 跑完所需零流轨迹后计算时间尺度和图：`python scripts/时间.py`
+5. 跑一条正式流动轨迹：`python scripts/轨迹.py --stage flow --structure g3 --flow 1 --seed 101 --gpu 0`
+6. 画径向占据图：`python scripts/径向.py`
+7. 画形变图：`python scripts/形变.py`
+8. 画翻滚图：`python scripts/翻滚.py`
 
-启动任务前先确认 GPU 空闲；不要在没有确认时直接启动正式任务。
+启动模拟前先确认 GPU 空闲；不要在没有确认时直接启动正式长任务。
 
 ## 文件职责
 
-- `config/base.json`：唯一的基础参数文件。
-- `scripts/build.py`：生成 `g1` 到 `g4` 四个整体网格结构。
-- `scripts/run.py`：底层模拟函数文件，不直接运行。
-- `scripts/run_timescale.py`：运行零流时间尺度数据；命令后面的数字就是要使用的 GPU。
-- `scripts/run_flow.py`：运行正式流动数据；命令后面的数字就是要使用的 GPU。
-- `scripts/gpu.py`：统一 GPU 分片调度函数；不单独运行，所有运行任务的脚本都应调用它。
-- `scripts/timescales.py`：从零流结果估计 `tau_shape` 和 `tau_int_r`。
+- `config/base.json`：唯一基础参数文件。
+- `scripts/结构.py`：只生成 `g1` 到 `g4` 的整体网格结构和结构表。
+- `scripts/轨迹.py`：只运行一条轨迹，例如某个结构、某个流强、某个 seed。
+- `scripts/时间.py`：只从零流轨迹计算时间尺度，并画时间尺度诊断图。
+- `scripts/径向.py`：只计算质心径向占据并画径向图。
+- `scripts/形变.py`：只计算形变指标并画形变图。
+- `scripts/翻滚.py`：只计算主轴翻滚强度并画翻滚图。
+- `scripts/核心.py`：底层模拟函数文件，不直接运行。
+- `scripts/显卡.py`：GPU 选择工具，供运行脚本复用。
 - `data/structures/`：网格结构 JSON。
 - `tables/structures/metrics.csv`：结构指标表。
-- `tables/analysis/`：时间尺度汇总表和单轨迹诊断表。
-- `results/<run_id>/`：每条任务的输出目录。
+- `tables/analysis/`：时间尺度结果和逐轨迹诊断表。
+- `results/<run_id>/`：每条轨迹的独立结果目录。
+- `figures/radial/`：径向占据图。
+- `figures/shape/`：形变图。
+- `figures/tumble/`：翻滚图。
+
+## 轨迹例子
+
+零流时间尺度轨迹：
+
+```bash
+python scripts/轨迹.py --stage time --structure g1 --seed 101 --gpu 0
+```
+
+正式凝胶流动轨迹：
+
+```bash
+python scripts/轨迹.py --stage flow --structure g3 --flow 1 --seed 101 --gpu 0
+```
+
+空管流体轨迹：
+
+```bash
+python scripts/轨迹.py --stage flow --structure fluid --flow 3 --seed 301 --gpu 0
+```
+
+短测试：
+
+```bash
+python scripts/轨迹.py --stage flow --structure g1 --flow 1 --seed 101 --gpu 0 --steps 10000
+```
 
 ## 运行脚本约定
 
-所有真正耗时的运行脚本都必须复用 `run.py::run_task()`，不要自己重新写模拟推进循环。这样每条模拟都会自动显示统一进度条，包括完成百分比、步数、速度和预计剩余时间。
+所有真正耗时的运行脚本都必须复用 `核心.py` 里的 `run_task()`，不要自己重新写模拟推进循环。这样每条模拟都会自动显示统一进度条，包括完成百分比、步数、速度和预计剩余时间。
+
+所有脚本文件名只用一个单词。新增脚本也必须遵守这个规则。
+
+## 画图脚本约定
+
+画图脚本不启动模拟，只从 `results/` 读取已经存在的 `timeseries.npz`。
+
+- 想看质心往管壁还是管中心分布，运行 `python scripts/径向.py`。
+- 想看凝胶是否被拉长、是否更非球形，运行 `python scripts/形变.py`。
+- 想看主轴是否快速转动和翻滚，运行 `python scripts/翻滚.py`。
+
+如果某个结构、流强或 seed 的结果还不存在，画图脚本会跳过那条数据，并在对应位置显示缺失，不会自动补跑模拟。
 
 ## 结构定义
 
@@ -50,45 +95,25 @@
 - `pipe.length`：圆管长度。
 - `structure.n_values`：要生成的网格结构编号。
 - `structure.segments_per_edge`：相邻交联点之间有多少个键段。
-- `bead.model`：键模型，当前为 `fene`。
-- `bead.fene_k`：FENE 键强度。
-- `bead.fene_r0`：FENE 最大伸长长度。
-- `bead.fene_delta`：FENE-WCA 的位移参数，当前为 `0.0`。
 - `bead.bond_equilibrium`：生成初始网格时使用的相邻珠子几何间距。
-- `bead.mass_ratio`：凝胶珠子质量相对溶剂粒子质量的倍数。
-- `bead.wca_sigma`：WCA 排斥势长度参数。
-- `bead.wca_epsilon`：WCA 排斥势能量参数。
 - `mpcd.number_density`：MPCD 溶剂数密度。
 - `mpcd.dt`：MD 基础时间步。
-- `mpcd.stream_period`：每隔多少个 MD 步做一次 MPCD streaming。
-- `mpcd.collision_period`：每隔多少个 MD 步做一次 MPCD collision。
-- `mpcd.collision_angle_deg`：MPCD 随机旋转角。
-- `timescale.steps`：零流时间尺度任务步数。
-- `production.sample_dt_over_tau_shape`：正式任务采样间隔相对 `tau_shape` 的比例。
-- `production.shape_tau_multiplier`：正式任务至少覆盖多少个形状弛豫时间。
-- `production.radial_tau_multiplier`：正式任务至少覆盖多少个径向相关时间。
-- `production.min_time`：正式任务最低物理时间。
-- `production.max_time`：正式任务最高物理时间，防止异常时间尺度生成不可承受任务。
-
-## 时间尺度逻辑
-
-正式凝胶任务不手写运行长度，而是由零流结果决定：
-
-```text
-sample_interval = ceil(0.1 * tau_shape_used / dt)
-production_time = max(100 * tau_shape_used, 50 * tau_int_r_used, min_time)
-production_steps = ceil(production_time / dt)
-```
-
-`tau_int_r_used` 来自 `r_cm` 自相关；`tau_rad_diagnostic`（R²/D_perp）仅诊断，不参与步数。
-`timescales.py` 会报告 `t_analyzed` 与 `t_over_tau_*`；轨迹过短时 flag 标 `short`。
+- `timescale.steps`：零流时间尺度轨迹默认步数。
+- `production.gel_flow_strength`：正式凝胶轨迹建议流强列表。
+- `production.gel_seeds`：正式凝胶轨迹建议 seed 列表。
+- `production.sample_dt_over_tau_shape`：正式轨迹采样间隔相对 `tau_shape` 的比例。
+- `production.shape_tau_multiplier`：正式轨迹至少覆盖多少个形状弛豫时间。
+- `production.radial_tau_multiplier`：正式轨迹至少覆盖多少个径向相关时间。
+- `production.min_time`：正式轨迹最低物理时间。
+- `production.max_time`：正式轨迹最高物理时间。
 
 ## 结果文件
 
-每条任务输出到 `results/<run_id>/`：
+每条轨迹输出到 `results/<run_id>/`：
 
 - `status.json`：运行状态。
 - `summary.json`：参数和摘要。
 - `profiles.npz`：时间平均溶剂径向剖面。
 - `timeseries.npz`：凝胶质心、形变、取向和壁面间隙时间序列。
 - `state.npz`：末态凝胶坐标和速度。
+

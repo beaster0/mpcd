@@ -1,4 +1,4 @@
-# 论文所需物理量与统计量的完整推导
+﻿# 论文所需物理量与统计量的完整推导
 
 _适用于当前 `mpcd` 项目：整体 `n×n×n` 三维网格凝胶、圆管 Poiseuille 流、MPCD-MD 耦合模拟。_
 
@@ -23,22 +23,22 @@ flowchart TB
     accTitle: Quantity Data Flow
     accDescr: The diagram shows how configuration files, generated gel structures, simulation trajectories, analysis tables, and paper figures are connected.
 
-    config["config/base.json<br/>基础参数"] --> build["scripts/build.py<br/>生成结构"]
+    config["config/base.json<br/>基础参数"] --> build["scripts/结构.py<br/>生成结构"]
     build --> structures["data/structures/g1-g4.json<br/>凝胶坐标和键"]
     build --> metrics["tables/structures/metrics.csv<br/>结构几何量"]
-    structures --> run["scripts/run.py<br/>运行模拟"]
+    structures --> run["scripts/轨迹.py<br/>运行模拟"]
     config --> run
     run --> series["results/run_id/timeseries.npz<br/>凝胶时间序列"]
     run --> profiles["results/run_id/profiles.npz<br/>流体径向剖面"]
 
-    series --> timescale["scripts/timescales.py<br/>计算时间尺度"]
+    series --> timescale["scripts/时间.py<br/>计算时间尺度"]
     timescale --> tau_table["tables/analysis/timescales.csv<br/>采用的时间尺度"]
     tau_table --> run
     series --> figures["论文图表<br/>径向占据、形变、取向、翻滚"]
     profiles --> figures
 ```
 
-这条链条的含义是：结构量来自 `build.py`，轨迹量来自 `run_timescale.py` 和 `run_flow.py`，时间尺度来自 `timescales.py`。正式运行长度不再由单独任务表保存，而是在 `run_flow.py` 启动时读取 `timescales.csv` 后即时计算。论文中不能出现没有来源的量，也不能把诊断量误写成主结论量。
+这条链条的含义是：结构量来自 `结构.py`，轨迹量来自 `轨迹.py`，时间尺度来自 `时间.py`。正式凝胶轨迹的运行长度不由单独任务表保存，而是在 `轨迹.py` 启动时读取 `timescales.csv` 后即时计算。径向、形变和翻滚图分别由 `径向.py`、`形变.py` 和 `翻滚.py` 从结果目录读取数据生成。论文中不能出现没有来源的量，也不能把诊断量误写成主结论量。
 
 ---
 
@@ -87,7 +87,7 @@ N_s = \rho V.
 N_s = 5.0 \times \pi \times 36^2 \times 100 \approx 2.04 \times 10^6.
 ```
 
-因此项目里真正的溶剂粒子数约为两百万个。这个量由 `scripts/run.py` 中的 `solvent_count()` 按 `rho*pi*R^2*L` 计算。
+因此项目里真正的溶剂粒子数约为两百万个。这个量由 `scripts/轨迹.py` 中的 `solvent_count()` 按 `rho*pi*R^2*L` 计算。
 
 ---
 
@@ -1239,7 +1239,7 @@ D_\perp
 
 这个公式表示对 `MSD_perp` 的线性区间求斜率后除以 `4`。`D_perp` 越小，质心横向探索管截面的速度越慢，低流强下径向分布越难快速稳定。
 
-当前 `timescales.py` 对 MSD 曲线中间区间做线性拟合，并用拟合斜率计算 `D_cm` 和 `D_perp`。`msd_cm_fit_r2` 和 `msd_perp_fit_r2` 是线性拟合质量指标，越接近 `1` 表明该区间越接近线性扩散。
+当前 `时间.py` 对 MSD 曲线中间区间做线性拟合，并用拟合斜率计算 `D_cm` 和 `D_perp`。`msd_cm_fit_r2` 和 `msd_perp_fit_r2` 是线性拟合质量指标，越接近 `1` 表明该区间越接近线性扩散。
 
 ### 17.3 当前扩散结果
 
@@ -1304,7 +1304,7 @@ t \sim R^2/D_\perp.
 
 ## 19. 正式运行长度如何从时间尺度推导
 
-正式凝胶任务的运行长度不直接硬编码成某个固定步数，而是由结构自己的时间尺度推导。当前规则在 `scripts/run_flow.py` 中。
+正式凝胶任务的运行长度不直接硬编码成某个固定步数，而是由结构自己的时间尺度推导。当前规则在 `scripts/轨迹.py` 中。
 
 ### 19.1 采样间隔
 
@@ -1547,7 +1547,7 @@ N_\text{step}
 | 形状弛豫 | 较可靠 | `T/tau_shape` 为 40 到 209 |
 | 径向记忆时间 | 可用于设计 | `T/tau_int_r` 为 5 到 9 |
 | 全管径扩散诊断 | 只作解释 | 数值很大，不直接决定正式任务长度 |
-| 正式流动结果 | 待运行 | 需要完成 `python scripts/run_flow.py ...` 后才能写结果结论 |
+| 正式流动结果 | 待运行 | 需要完成 `python scripts/轨迹.py ...` 后才能写结果结论 |
 
 因此，现在最重要的不是再发明新量，而是把正式任务跑出后，围绕少数核心量组织论文：径向占据 `r_cm/R`、形变 `Gzz/Gperp` 和 `A`、取向翻滚 `theta(t)`、流体剖面 `mean_vz(r)`。
 
@@ -1566,3 +1566,5 @@ N_\text{step}
 [^5]: Chodera, J. D. (2016). "A simple method for automated equilibration detection in molecular simulations." *Journal of Chemical Theory and Computation*, 12, 1799-1805. https://doi.org/10.1021/acs.jctc.5b00784
 
 [^6]: Rudnick, J., & Gaspari, G. (1987). "The shapes of random walks." *Science*, 237, 384-389. https://doi.org/10.1126/science.237.4813.384
+
+

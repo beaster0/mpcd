@@ -1,0 +1,21 @@
+[脚本清理开始] Sun Jun 14 02:47:06 AM UTC 2026
+[删除旧入口脚本]
+scripts/图.py
+scripts/论文.py
+scripts/径向.py
+scripts/形变.py
+scripts/翻滚.py
+scripts/探索.py
+scripts/队列.py
+[保留核心链条]
+scripts/命名.py
+scripts/图版.py
+scripts/时间.py
+scripts/显卡.py
+scripts/校准.py
+scripts/核心.py
+scripts/正式.py
+scripts/流场.py
+scripts/结构.py
+scripts/轨迹.py
+[脚本清理结束] Sun Jun 14 02:47:06 AM UTC 2026

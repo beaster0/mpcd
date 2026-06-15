@@ -1,0 +1,53 @@
+[清理开始] Sun Jun 14 02:45:34 AM UTC 2026
+[保留] 正在运行目录：
+results/半径36_结构n1_体力0_种子101
+results/半径36_结构n1_体力0.001_种子101
+results/半径36_结构n1_体力0.003_种子101
+[删除旧图]
+figures/形变
+figures/径向
+figures/综合
+figures/翻滚
+figures/论文
+figures/轨迹
+figures/近壁
+figures/图版/06-14-02-14-二维分布.png
+figures/图版/06-14-02-14-径向分布.png
+figures/图版/06-14-02-14-流场与构型.png
+figures/图版/06-14-02-14-条件形变.png
+figures/图版/06-14-02-14-二维响应.png
+figures/图版/06-14-02-14-分布宽度.png
+[删除短探索凝胶结果，保留空管和正在运行的三条]
+results/半径36_结构n2_体力0.01_种子101
+results/半径36_结构n2_体力0.003_种子101
+results/半径36_结构n4_体力0.001_种子101
+results/半径36_结构n3_体力0.001_种子101
+results/半径36_结构n3_体力0_种子101
+保留运行中 results/半径36_结构n1_体力0.003_种子101
+results/半径36_结构n2_体力0_种子101
+保留运行中 results/半径36_结构n1_体力0.001_种子101
+results/半径36_结构n4_体力0.003_种子101
+results/半径36_结构n4_体力0_种子101
+results/半径36_结构n4_体力0.01_种子101
+保留运行中 results/半径36_结构n1_体力0_种子101
+results/半径36_结构n4_体力0.005_种子101
+results/半径36_结构n3_体力0.003_种子101
+results/半径36_结构n1_体力0.01_种子101
+results/半径36_结构n2_体力0.005_种子101
+results/半径36_结构n3_体力0.01_种子101
+results/半径36_结构n2_体力0.001_种子101
+results/半径36_结构n3_体力0.005_种子101
+results/半径36_结构n1_体力0.005_种子101
+[删除旧 CSV 任务表目录]
+tables/tasks/timescale.csv
+tables/tasks/production.csv
+tables/tasks/timescale_gpu1.csv
+tables/tasks/production_gpu1.csv
+tables/tasks/timescale_gpu0.csv
+tables/tasks/production_gpu0.csv
+[删除重复备份包]
+backup_scripts/scripts_before_chinese_.tar.gz
+[保留] backup_scripts 中带时间戳的两个备份包
+[保留] figures/图版 最新图版
+[保留] results/半径36_空管_体力0.005_种子301
+[清理结束] Sun Jun 14 02:45:34 AM UTC 2026

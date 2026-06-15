@@ -101,7 +101,7 @@ $$
 
 这个长度是网格孔径的直接几何尺度。由于所有结构使用相同的键长、相同的每边键段数和相同的相互作用参数，局部网络规则在 G1--G4 之间保持一致。
 
-当前结构由 `scripts/build.py` 生成，输出为 `data/structures/g1.json` 到 `data/structures/g4.json`。结构指标写入 `data/structures/metrics.csv`。
+当前结构由 `scripts/结构.py` 生成，输出为 `data/structures/g1.json` 到 `data/structures/g4.json`。结构指标写入 `data/structures/metrics.csv`。
 
 当前几何指标为：
 
@@ -246,13 +246,13 @@ g4_f3_s105
 | 物理时间 | 4,000 |
 | 数量 | 20 |
 
-时间尺度任务不写成 CSV。运行时由 `scripts/run_timescale.py` 根据 `config/base.json` 直接循环生成并运行。
+时间尺度任务不写成 CSV，也不先生成任务表。每次只运行一条明确轨迹。结构、seed 和 GPU 都在命令行里直接写清楚。
 
 ```text
-python scripts/run_timescale.py 0 1
+python scripts/轨迹.py --stage time --structure g1 --seed 101 --gpu 0
 ```
 
-命令最后的 `0 1` 表示同时使用 GPU 0 和 GPU 1；如果只想用一张卡，例如 GPU 0，则运行 `python scripts/run_timescale.py 0`。
+这条命令只会生成 `results/ts_r36_g1_s101/`。要完成 20 条零流时间尺度任务，就把结构 `g1--g4` 和 seed `101--105` 逐条替换运行。这样每条数据的来源最清楚，也不会在项目里留下额外任务文件。
 
 ### 6.3 正式任务
 
@@ -270,7 +270,7 @@ python scripts/run_timescale.py 0 1
 凝胶正式任务同时包含零流基线和流动响应统计。$\mathcal{F}=0$ 的 5 个 seed 用来计算同结构零流基线，$\mathcal{F}=1,3$ 用来计算流动响应。每个结构的正式运行长度由 `tables/analysis/timescales.csv` 自动决定：
 
 $$
-\Delta t_{\mathrm{sample}}=0.1\tau_{\mathrm{shape,used}},
+\\Delta t_{\\mathrm{sample}}=\\max\\left(0.1\\tau_{\\mathrm{shape,used}},\\;2000\\Delta t\\right),
 $$
 
 $$
@@ -287,17 +287,25 @@ $$
 | 结构 | G1、G2、G3、G4 |
 | 流强 | $\mathcal{F}=0,1,3$ |
 | seed | 101、102、103、104、105 |
-| 步数 | 运行时由 `scripts/run_flow.py` 根据时间尺度生成 |
-| 采样间隔 | 运行时由 `scripts/run_flow.py` 根据时间尺度生成 |
+| 步数 | 运行时由 `scripts/轨迹.py` 根据时间尺度生成 |
+| 采样间隔 | 运行时由 `scripts/轨迹.py` 根据时间尺度生成 |
 | 数量 | 60 |
 
-正式任务也不写成 CSV。运行时由 `scripts/run_flow.py` 读取 `tables/analysis/timescales.csv`，直接循环生成并运行：
+正式任务也不写成 CSV。每次仍然只运行一条明确轨迹。凝胶正式任务由 `scripts/轨迹.py` 读取 `tables/analysis/timescales.csv`，自动计算这条轨迹需要的步数和采样间隔：
 
 ```text
-python scripts/run_flow.py 0 1
+python scripts/轨迹.py --stage flow --structure g3 --flow 1 --seed 101 --gpu 0
 ```
 
-命令最后的 GPU 编号可以按实际空闲显卡填写，例如 `python scripts/run_flow.py 2 3`。
+这条命令只会生成 `results/r36_g3_f1_s101/`。要完成全部凝胶正式任务，就逐条替换结构 `g1--g4`、流强 `0,1,3` 和 seed `101--105`。
+
+纯流体任务也用同一个入口，只把结构写成 `fluid`：
+
+```text
+python scripts/轨迹.py --stage flow --structure fluid --flow 3 --seed 301 --gpu 0
+```
+
+这条命令只会生成 `results/r36_fluid_f3_s301/`。要完成全部纯流体任务，就逐条替换流强 `0,1,3` 和 seed `301--303`。
 
 正式任务总数为
 
@@ -489,15 +497,17 @@ $$
 ## 13. 执行顺序
 
 1. 修改 `config/base.json` 中的基础物理参数。
-2. 运行 `python scripts/build.py` 生成结构。
+2. 运行 `python scripts/结构.py` 生成结构。
 3. 检查 `tables/structures/metrics.csv`，确认 G1--G4 的珠子数、键数和 $R_g/R$。
-4. 在服务器上运行 `python scripts/run_timescale.py 0 1`，先跑零流时间尺度任务。
-5. 时间尺度任务完成后，从 `timeseries.npz` 计算每个结构的 `tau_shape_used` 和 `tau_r_used`，写入 `tables/analysis/timescales.csv`。
-6. 运行 `python scripts/run_flow.py 0 1` 跑正式任务。
-7. 用 `python scripts/run_flow.py --status` 查看正式任务状态。
-9. 每条任务完成后检查 `summary.json`、`profiles.npz` 和 `timeseries.npz`。
-10. 用后处理脚本从 `timeseries.npz` 计算径向分布、形变、取向和翻滚指标。
-11. 按图 1--图 7 的顺序组织结果。
+4. 在服务器上用 `python scripts/轨迹.py --stage time --structure g1 --seed 101 --gpu 0` 这种格式逐条跑零流时间尺度任务。
+5. 零流时间尺度任务完成后，运行 `python scripts/时间.py`，写入 `tables/analysis/timescales.csv` 并生成时间尺度诊断图。
+6. 用 `python scripts/轨迹.py --stage flow --structure g3 --flow 1 --seed 101 --gpu 0` 这种格式逐条跑正式凝胶任务。
+7. 用 `python scripts/轨迹.py --stage flow --structure fluid --flow 3 --seed 301 --gpu 0` 这种格式逐条跑纯流体任务。
+8. 每条任务完成后检查 `summary.json`、`profiles.npz` 和 `timeseries.npz`。
+9. 运行 `python scripts/径向.py` 画径向占据图。
+10. 运行 `python scripts/形变.py` 画形变图。
+11. 运行 `python scripts/翻滚.py` 画翻滚图。
+12. 按图 1--图 7 的顺序组织结果。
 
 ---
 
@@ -564,3 +574,5 @@ $$
 [30] Efron, B. Bootstrap methods: Another look at the jackknife. *Ann. Stat.* **7**, 1--26 (1979). DOI: 10.1214/aos/1176344552.
 
 [31] Kunsch, H. R. The jackknife and the bootstrap for general stationary observations. *Ann. Stat.* **17**, 1217--1241 (1989). DOI: 10.1214/aos/1176347265.
+
+
